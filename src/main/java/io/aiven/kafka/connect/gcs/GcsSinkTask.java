@@ -19,6 +19,7 @@ package io.aiven.kafka.connect.gcs;
 import java.nio.channels.Channels;
 import java.util.Collection;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 
@@ -28,6 +29,7 @@ import org.apache.kafka.connect.errors.ConnectException;
 import org.apache.kafka.connect.sink.SinkRecord;
 import org.apache.kafka.connect.sink.SinkTask;
 
+import io.aiven.kafka.connect.common.config.FormatType;
 import io.aiven.kafka.connect.common.grouper.RecordGrouper;
 import io.aiven.kafka.connect.common.grouper.RecordGrouperFactory;
 import io.aiven.kafka.connect.common.output.OutputWriter;
@@ -118,7 +120,10 @@ public final class GcsSinkTask extends SinkTask {
     }
 
     private void flushFile(final String filename, final List<SinkRecord> records) {
-        final BlobInfo blob = BlobInfo.newBuilder(config.getBucketName(), config.getPrefix() + filename)
+        final BlobInfo blob = BlobInfo.newBuilder(config.getBucketName(),
+                config.getPrefix() + filename + (config.getFormatType().equals(FormatType.PARQUET_AYLA_CUSTOM)
+                        ? "." + config.getFormatType().name.replace("_ayla_custom", "").toLowerCase(Locale.ENGLISH)
+                        : ""))
                 .setContentEncoding(config.getObjectContentEncoding())
                 .build();
         try (var out = Channels.newOutputStream(storage.writer(blob));
