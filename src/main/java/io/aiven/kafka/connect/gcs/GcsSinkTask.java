@@ -17,6 +17,7 @@
 package io.aiven.kafka.connect.gcs;
 
 import java.nio.channels.Channels;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 import java.util.Locale;
@@ -32,6 +33,7 @@ import org.apache.kafka.connect.sink.SinkTask;
 import io.aiven.kafka.connect.common.config.FormatType;
 import io.aiven.kafka.connect.common.grouper.RecordGrouper;
 import io.aiven.kafka.connect.common.grouper.RecordGrouperFactory;
+import io.aiven.kafka.connect.common.handler.error.KafkaErrorProducer;
 import io.aiven.kafka.connect.common.output.OutputWriter;
 
 import com.google.api.gax.retrying.RetrySettings;
@@ -39,6 +41,8 @@ import com.google.api.gax.rpc.FixedHeaderProvider;
 import com.google.cloud.storage.BlobInfo;
 import com.google.cloud.storage.Storage;
 import com.google.cloud.storage.StorageOptions;
+import org.codehaus.jettison.json.JSONException;
+import org.codehaus.jettison.json.JSONObject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -120,22 +124,74 @@ public final class GcsSinkTask extends SinkTask {
     }
 
     private void flushFile(final String filename, final List<SinkRecord> records) {
-        final BlobInfo blob = BlobInfo.newBuilder(config.getBucketName(),
-                config.getPrefix() + filename + (config.getFormatType().equals(FormatType.PARQUET_AYLA_CUSTOM)
-                        ? "." + config.getFormatType().name.replace("_ayla_custom", "").toLowerCase(Locale.ENGLISH)
-                        : ""))
-                .setContentEncoding(config.getObjectContentEncoding())
-                .build();
-        try (var out = Channels.newOutputStream(storage.writer(blob));
-                var writer = OutputWriter.builder()
-                        .withExternalProperties(config.originalsStrings())
-                        .withOutputFields(config.getOutputFields())
-                        .withCompressionType(config.getCompressionType())
-                        .withEnvelopeEnabled(config.envelopeEnabled())
-                        .build(out, config.getFormatType())) {
-            writer.writeRecords(records);
-        } catch (final Exception e) { // NOPMD broad exception catched
-            throw new ConnectException(e);
+
+        // Move error check here and send to dlq
+        final List<SinkRecord> sinkRecords = new ArrayList<>();
+        final List<String> erroneousEvents = new ArrayList<>();
+
+        segregateSinkRecords(records, sinkRecords, erroneousEvents);
+
+        if (!sinkRecords.isEmpty()) {
+            final BlobInfo blob = BlobInfo.newBuilder(config.getBucketName(),
+                    config.getPrefix() + filename + (config.getFormatType().equals(FormatType.PARQUET_AYLA_CUSTOM)
+                            ? "." + config.getFormatType().name.replace("_ayla_custom", "").toLowerCase(Locale.ENGLISH)
+                            : ""))
+                    .setContentEncoding(config.getObjectContentEncoding())
+                    .build();
+            try (var out = Channels.newOutputStream(storage.writer(blob));
+                    var writer = OutputWriter.builder()
+                            .withExternalProperties(config.originalsStrings())
+                            .withOutputFields(config.getOutputFields())
+                            .withCompressionType(config.getCompressionType())
+                            .withEnvelopeEnabled(config.envelopeEnabled())
+                            .build(out, config.getFormatType())) {
+                writer.writeRecords(sinkRecords);// Throw exception when erroneous record exists
+            } catch (final JSONException e) {
+                LOG.error("Bad Records: {}, total records discarded: {}", sinkRecords, sinkRecords.size());
+            } catch (final Exception e) { // NOPMD broad exception catched
+                throw new ConnectException(e);
+            }
+        }
+        handleErroneousRecords(erroneousEvents);
+    }
+
+    private void segregateSinkRecords(final List<SinkRecord> records, final List<SinkRecord> sinkRecords,
+            final List<String> erroneousEvents) {
+        if (config.getFormatType().equals(FormatType.PARQUET_AYLA_CUSTOM)) {
+            for (final var record : records) {
+                if (isValidJson(record.value().toString())) {
+                    sinkRecords.add(record);
+                } else {
+                    erroneousEvents.add(record.value().toString());
+                }
+            }
+        } else {
+            sinkRecords.addAll(records);
+        }
+    }
+
+    private void handleErroneousRecords(final List<String> erroneousEvents) {
+        if (!erroneousEvents.isEmpty()) {
+            // Send to dead letter topic
+            KafkaErrorProducer kafkaErrorProducer = null;
+            try {
+                kafkaErrorProducer = new KafkaErrorProducer(null);
+                final KafkaErrorProducer finalKafkaErrorProducer = kafkaErrorProducer;
+                erroneousEvents.forEach(value -> finalKafkaErrorProducer.send(null, value));
+            } finally {
+                if (kafkaErrorProducer != null) {
+                    kafkaErrorProducer.close();
+                }
+            }
+        }
+    }
+
+    private boolean isValidJson(final String jsonString) {
+        try {
+            new JSONObject(jsonString);
+            return true;
+        } catch (JSONException e) {
+            return false;
         }
     }
 
