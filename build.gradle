@@ -53,14 +53,7 @@ repositories {
         url "https://packages.confluent.io/maven"
     }
     maven {
-        url uploadUrl + "/repository/releases"
-        credentials {
-            username nexusUsername
-            password nexusPassword
-        }
-    }
-    maven {
-        url uploadUrl + "/repository/snapshots"
+        url nexusUrl
         credentials {
             username nexusUsername
             password nexusPassword
@@ -110,7 +103,7 @@ ext {
     confluentPlatformVersion = "4.1.4"
     // Align with version used by commons
     avroConverterVersion = "7.2.2"
-    //aivenConnectCommonsVersion = "0.12.0"
+
     aivenConnectCommonsVersion = "0.14.1-SNAPSHOT"
 
     slf4jVersion = "1.7.36"
