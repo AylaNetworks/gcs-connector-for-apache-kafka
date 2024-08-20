@@ -53,7 +53,14 @@ repositories {
         url "https://packages.confluent.io/maven"
     }
     maven {
-        url nexusUrl
+        url uploadUrl + "/repository/releases"
+        credentials {
+            username nexusUsername
+            password nexusPassword
+        }
+    }
+    maven {
+        url uploadUrl + "/repository/snapshots"
         credentials {
             username nexusUsername
             password nexusPassword
