@@ -52,6 +52,13 @@ repositories {
     maven {
         url "https://packages.confluent.io/maven"
     }
+    maven {
+        url nexusUrl
+        credentials {
+            username nexusUsername
+            password nexusPassword
+        }
+    }
 }
 
 java {
@@ -60,6 +67,19 @@ java {
 
     withJavadocJar()
     withSourcesJar()
+}
+
+ext {
+    nexusUrl = System.getenv("NEXUS_URL") == null ? project.property("nexusUrl") : System.getenv("NEXUS_URL")
+    uploadUrl = System.getenv("UPLOAD_URL") == null ? project.property("uploadUrl") : System.getenv("UPLOAD_URL")
+    nexusUsername = System.getenv("NEXUS_USERNAME") == null ? project.property("nexusUsername") : System.getenv("NEXUS_USERNAME")
+    nexusPassword = System.getenv("NEXUS_PASSWORD") == null ? project.property("nexusPassword") : System.getenv("NEXUS_PASSWORD")
+}
+
+if (project.hasProperty('buildVersion')) {
+    version = project.buildVersion
+} else {
+    version = '0.0.1-SNAPSHOT'
 }
 
 wrapper {
@@ -84,7 +104,7 @@ ext {
     // Align with version used by commons
     avroConverterVersion = "7.2.2"
     //aivenConnectCommonsVersion = "0.12.0"
-    aivenConnectCommonsVersion = "0.13.1-SNAPSHOT"
+    aivenConnectCommonsVersion = "0.14.1-SNAPSHOT"
 
     slf4jVersion = "1.7.36"
 
@@ -398,36 +418,26 @@ publishing {
                 }
 
                 scm {
-                    connection = 'scm:git:git://github.com:aiven/gcs-connector-for-apache-kafka.git'
-                    developerConnection = 'scm:git:ssh://github.com:aiven/gcs-connector-for-apache-kafka.git'
-                    url = 'https://github.com/aiven/gcs-connector-for-apache-kafka'
+                    connection = 'scm:git:git://github.com:AylaNetworks/gcs-connector-for-apache-kafka.git'
+                    developerConnection = 'scm:git:ssh://github.com:AylaNetworks/gcs-connector-for-apache-kafka.git'
+                    url = 'https://github.com/AylaNetworks/gcs-connector-for-apache-kafka'
                 }
             }
         }
     }
-
-    /*repositories {
-        maven {
-            name="sonatype"
-
-            def releasesRepoUrl = "https://oss.sonatype.org/service/local/staging/deploy/maven2"
-            def snapshotsRepoUrl = "https://oss.sonatype.org/content/repositories/snapshots"
-            url = version.endsWith('SNAPSHOT') ? snapshotsRepoUrl : releasesRepoUrl
-
-            credentials(PasswordCredentials)
-        }
-    }*/
     repositories {
         maven {
-            def releasesRepoUrl = uploadUrl + "/repository/releases"
-            def snapshotsRepoUrl = uploadUrl + "/repository/snapshots"
-            url = version.endsWith('SNAPSHOT') ? snapshotsRepoUrl : releasesRepoUrl
-
+            if (project.version.endsWith('-SNAPSHOT')) {
+                url = uri("${uploadUrl}/snapshots")
+            } else {
+                url = uri("${uploadUrl}/releases")
+            }
             credentials {
-                username nexusUsername
-                password nexusPassword
+                username "${nexusUsername}"
+                password "${nexusPassword}"
             }
         }
+        mavenLocal()
     }
 }
 
