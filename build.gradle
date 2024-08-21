@@ -39,8 +39,6 @@ plugins {
     id "pmd"
 
     id "com.github.spotbugs" version "6.0.13"
-
-    id 'com.github.johnrengelman.shadow' version '7.0.0' // Use the latest version
 }
 
 group = "io.aiven"
@@ -367,15 +365,6 @@ jar {
     from {
         configurations.runtimeClasspath.collect { it.isDirectory() ? it : zipTree(it) }
     }
-}
-
-shadowJar {
-    manifest {
-        attributes 'Version': '${project.version}'
-        attributes 'Main-Class': 'io.aiven.kafka.connect.gcs.GcsSinkConnector' // Specify your main class
-    }
-    //archiveFileName = 'gcs-connector-for-apache-kafka.jar' // Optional: Rename the shaded JAR file
-    archiveFileName = 'gcs-connector-for-apache-kafka.' + "${project.version}" + ".jar"// Optional: Rename the shaded JAR file
 }
 
 javadoc {
