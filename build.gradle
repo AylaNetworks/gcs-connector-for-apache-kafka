@@ -358,7 +358,8 @@ jar {
 
     manifest {
         attributes(
-                'Version': "${project.version}"
+                'Version': "${project.version}",
+                'Main-Class': 'io.aiven.kafka.connect.gcs.GcsSinkConnector' // Specify your main class
         )
     }
 
