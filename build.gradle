@@ -39,6 +39,8 @@ plugins {
     id "pmd"
 
     id "com.github.spotbugs" version "6.0.13"
+
+    id 'com.github.johnrengelman.shadow' version '7.0.0' // Use the latest version
 }
 
 group = "io.aiven"
@@ -355,9 +357,9 @@ jar {
     duplicatesStrategy = 'exclude' // Set the strategy to exclude duplicates
 
     manifest {
-        attributes(
-                'Version': "${project.version}",
-                'Main-Class': 'io.aiven.kafka.connect.gcs.GcsSinkConnector' // Specify your main class
+        attributes (
+            'Version': "${project.version}",
+            'Main-Class': 'io.aiven.kafka.connect.gcs.GcsSinkConnector' // Specify your main class
         )
     }
 
@@ -371,6 +373,17 @@ javadoc {
     options.addBooleanOption('html5', true)
     // disable missing javadoc lint and show only warning and error messages
     options.addStringOption('Xdoclint:all,-missing', '-quiet')
+}
+
+shadowJar {
+    manifest {
+        attributes (
+            'Version': "${project.version}",
+            'Main-Class': 'io.aiven.kafka.connect.gcs.GcsSinkConnector' // Specify your main class
+        )
+    }
+    //archiveFileName = 'gcs-connector-for-apache-kafka.jar' // Optional: Rename the shaded JAR file
+    archiveFileName = 'gcs-connector-for-apache-kafka.' + "${project.version}" + ".jar"// Optional: Rename the shaded JAR file
 }
 
 publishing {
