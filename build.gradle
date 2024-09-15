@@ -39,15 +39,25 @@ plugins {
     id "pmd"
 
     id "com.github.spotbugs" version "6.0.13"
+
+    id 'com.github.johnrengelman.shadow' version '7.0.0' // Use the latest version
 }
 
 group = "io.aiven"
 
 repositories {
+    mavenLocal()
     mavenCentral()
     // For kafka-avro-serializer and kafka-connect-avro-converter
     maven {
         url "https://packages.confluent.io/maven"
+    }
+    maven {
+        url nexusUrl
+        credentials {
+            username nexusUsername
+            password nexusPassword
+        }
     }
 }
 
@@ -57,6 +67,19 @@ java {
 
     withJavadocJar()
     withSourcesJar()
+}
+
+ext {
+    nexusUrl = System.getenv("NEXUS_URL") == null ? project.property("nexusUrl") : System.getenv("NEXUS_URL")
+    uploadUrl = System.getenv("UPLOAD_URL") == null ? project.property("uploadUrl") : System.getenv("UPLOAD_URL")
+    nexusUsername = System.getenv("NEXUS_USERNAME") == null ? project.property("nexusUsername") : System.getenv("NEXUS_USERNAME")
+    nexusPassword = System.getenv("NEXUS_PASSWORD") == null ? project.property("nexusPassword") : System.getenv("NEXUS_PASSWORD")
+}
+
+if (project.hasProperty('buildVersion')) {
+    version = project.buildVersion
+} else {
+    version = '0.0.1-SNAPSHOT'
 }
 
 wrapper {
@@ -80,7 +103,8 @@ ext {
     confluentPlatformVersion = "4.1.4"
     // Align with version used by commons
     avroConverterVersion = "7.2.2"
-    aivenConnectCommonsVersion = "0.12.0"
+
+    aivenConnectCommonsVersion = "0.14.10"
 
     slf4jVersion = "1.7.36"
 
@@ -129,6 +153,7 @@ dependencies {
     compileOnly "org.apache.kafka:connect-runtime:$kafkaVersion"
 
     implementation "io.aiven:commons-for-apache-kafka-connect:$aivenConnectCommonsVersion"
+    implementation 'org.codehaus.jettison:jettison:1.5.4'
 
     implementation("com.google.cloud:google-cloud-storage:2.37.0") {
         exclude group: "com.google.guava", module: "guava"
@@ -329,10 +354,18 @@ processResources {
 }
 
 jar {
+    duplicatesStrategy = 'exclude' // Set the strategy to exclude duplicates
+
     manifest {
-        attributes(
-                'Version': "${project.version}"
+        attributes (
+            'Version': "${project.version}",
+            'Main-Class': 'io.aiven.kafka.connect.gcs.GcsSinkConnector' // Specify your main class
         )
+    }
+
+    // Include dependencies inside the JAR
+    from {
+        configurations.runtimeClasspath.collect { it.isDirectory() ? it : zipTree(it) }
     }
 }
 
@@ -340,6 +373,17 @@ javadoc {
     options.addBooleanOption('html5', true)
     // disable missing javadoc lint and show only warning and error messages
     options.addStringOption('Xdoclint:all,-missing', '-quiet')
+}
+
+shadowJar {
+    manifest {
+        attributes (
+            'Version': "${project.version}",
+            'Main-Class': 'io.aiven.kafka.connect.gcs.GcsSinkConnector' // Specify your main class
+        )
+    }
+    //archiveFileName = 'gcs-connector-for-apache-kafka.jar' // Optional: Rename the shaded JAR file
+    archiveFileName = 'gcs-connector-for-apache-kafka.' + "${project.version}" + ".jar"// Optional: Rename the shaded JAR file
 }
 
 publishing {
@@ -377,28 +421,30 @@ publishing {
                 }
 
                 scm {
-                    connection = 'scm:git:git://github.com:aiven/gcs-connector-for-apache-kafka.git'
-                    developerConnection = 'scm:git:ssh://github.com:aiven/gcs-connector-for-apache-kafka.git'
-                    url = 'https://github.com/aiven/gcs-connector-for-apache-kafka'
+                    connection = 'scm:git:git://github.com:AylaNetworks/gcs-connector-for-apache-kafka.git'
+                    developerConnection = 'scm:git:ssh://github.com:AylaNetworks/gcs-connector-for-apache-kafka.git'
+                    url = 'https://github.com/AylaNetworks/gcs-connector-for-apache-kafka'
                 }
             }
         }
     }
-
     repositories {
         maven {
-            name="sonatype"
-
-            def releasesRepoUrl = "https://oss.sonatype.org/service/local/staging/deploy/maven2"
-            def snapshotsRepoUrl = "https://oss.sonatype.org/content/repositories/snapshots"
-            url = version.endsWith('SNAPSHOT') ? snapshotsRepoUrl : releasesRepoUrl
-
-            credentials(PasswordCredentials)
+            if (project.version.endsWith('-SNAPSHOT')) {
+                url = uri("${uploadUrl}/snapshots")
+            } else {
+                url = uri("${uploadUrl}/releases")
+            }
+            credentials {
+                username "${nexusUsername}"
+                password "${nexusPassword}"
+            }
         }
+        mavenLocal()
     }
 }
 
-signing {
+/*signing {
     sign publishing.publications.maven
     useGpgCmd()
     // Some issue in the plugin:
@@ -417,4 +463,4 @@ signing {
             setDefaultType(binary.getExtension());
         }
     }
-}
+}*/
